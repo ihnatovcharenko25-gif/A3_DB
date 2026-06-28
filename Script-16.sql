@@ -42,8 +42,6 @@ create table order_log (
 
 
 
-
-
 CREATE OR REPLACE FUNCTION calculate_order_total(p_order_id int)
 RETURNS numeric
 AS $$
@@ -85,7 +83,7 @@ $$ LANGUAGE sql;
 
 
 
-CREATE OR REPLACE FUNCTION trigger_update_order_total()
+CREATE OR REPLACE FUNCTION trigger_update_order_total_func()
 RETURNS TRIGGER
 AS $$
 BEGIN
@@ -97,16 +95,16 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER after_order_items_change
+CREATE TRIGGER trigger_update_order_total
 AFTER INSERT OR UPDATE OR DELETE 
 ON order_items
 FOR EACH ROW
 EXECUTE FUNCTION 
-trigger_update_order_total();
+trigger_update_order_total_func();
 
 
 
-CREATE OR REPLACE FUNCTION trigger_log_order()
+CREATE OR REPLACE FUNCTION trigger_log_order_func()
 RETURNS TRIGGER
 AS $$
 BEGIN
@@ -116,10 +114,33 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER after_order_created
+CREATE TRIGGER trigger_log_order
 AFTER INSERT ON orders
 FOR EACH ROW
 EXECUTE FUNCTION trigger_log_order();
+
+
+
+---------------------------------------------------------------------------------
+
+
+
+
+INSERT INTO customers (full_name, email, balance) VALUES ('customer1_name', 'customer1@email.com', 300.00);
+INSERT INTO products (product_name, price, stock_quantity) VALUES ('product1', 100.00, 10);
+INSERT INTO products (product_name, price, stock_quantity) VALUES ('product2', 20.00, 100);
+
+CALL create_order(1); --create_order(p_customer_id int)
+
+CALL add_product_to_order(1, 1, 1); --add_product_to_order(p_order_id int,p_product_id int,p_quantity int)
+CALL add_product_to_order(1, 2, 2); --add_product_to_order(p_order_id int,p_product_id int,p_quantity int)
+
+SELECT * FROM products;
+SELECT * FROM orders;
+SELECT * FROM order_items;
+SELECT * FROM order_log;
+
+
 
 
 
