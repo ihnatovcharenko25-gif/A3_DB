@@ -44,4 +44,83 @@ create table order_log (
 
 
 
+CREATE OR REPLACE FUNCTION calculate_order_total(p_order_id int)
+RETURNS numeric
+AS $$
+    SELECT COALESCE(SUM(quantity * price), 0)
+    FROM order_items
+    WHERE order_id = p_order_id;
+$$ LANGUAGE sql;
+
+
+
+CREATE OR REPLACE PROCEDURE create_order(p_customer_id int)
+AS $$
+    INSERT INTO orders (customer_id, order_date, total_amount)
+    SELECT p_customer_id, CURRENT_TIMESTAMP, 0
+    WHERE EXISTS 
+		(SELECT 1 FROM customers WHERE customer_id = p_customer_id);
+$$ LANGUAGE sql;
+
+
+
+
+CREATE OR REPLACE PROCEDURE add_product_to_order(
+    p_order_id int,
+    p_product_id int,
+    p_quantity int
+)
+AS $$
+    UPDATE products
+    SET stock_quantity = stock_quantity - p_quantity
+    WHERE product_id = p_product_id 
+      AND stock_quantity >= p_quantity 
+      AND p_quantity > 0;
+
+    INSERT INTO order_items (order_id, product_id, quantity, price)
+    SELECT p_order_id, p_product_id, p_quantity, price
+    FROM products
+    WHERE product_id = p_product_id;
+$$ LANGUAGE sql;
+
+
+
+CREATE OR REPLACE FUNCTION trigger_update_order_total()
+RETURNS TRIGGER
+AS $$
+BEGIN
+    UPDATE orders 
+    SET total_amount = calculate_order_total(COALESCE(NEW.order_id, OLD.order_id))
+    WHERE order_id = COALESCE(NEW.order_id, OLD.order_id);
+    
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER after_order_items_change
+AFTER INSERT OR UPDATE OR DELETE 
+ON order_items
+FOR EACH ROW
+EXECUTE FUNCTION 
+trigger_update_order_total();
+
+
+
+CREATE OR REPLACE FUNCTION trigger_log_order()
+RETURNS TRIGGER
+AS $$
+BEGIN
+    INSERT INTO order_log (order_id, customer_id, action, log_date)
+    VALUES (NEW.order_id, NEW.customer_id, 'CREATED', CURRENT_TIMESTAMP);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER after_order_created
+AFTER INSERT ON orders
+FOR EACH ROW
+EXECUTE FUNCTION trigger_log_order();
+
+
+
 
